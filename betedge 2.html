@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BetEdge</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050508;
+    --s1: #0a0a12;
+    --s2: #0f0f1a;
+    --border: #1a1a2e;
+    --accent: #00d4ff;
+    --green: #00e676;
+    --red: #ff3d57;
+    --purple: #9c6fff;
+    --yellow: #ffc947;
+    --text: #e8eaf6;
+    --muted: #3a3a5c;
+    --muted2: #666688;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Space Grotesk', sans-serif; min-height: 100vh; }
+  code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* NOISE OVERLAY */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    opacity: 0.4;
+  }
+
+  /* LAYOUT */
+  .app { position: relative; z-index: 1; }
+
+  /* HEADER */
+  header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(5,5,8,0.95); backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-size: 20px; font-weight: 700; letter-spacing: 3px; }
+  .logo span { color: var(--accent); }
+  .logo small { font-size: 9px; color: var(--muted); margin-left: 10px; font-family: 'JetBrains Mono'; letter-spacing: 1px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; transition: all .3s; }
+  .status-dot.active { background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+
+  /* TABS */
+  nav { display: flex; border-bottom: 1px solid var(--border); padding: 0 24px; background: var(--s1); }
+  .tab { padding: 12px 18px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; letter-spacing: 1.5px; transition: all .2s; }
+  .tab.active { color: var(--accent); border-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--muted2); }
+
+  /* MAIN */
+  main { padding: 20px 24px; max-width: 1100px; }
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadein .25s ease; }
+  @keyframes fadein { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+
+  /* STATS GRID */
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat {
+    background: var(--s2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; position: relative; overflow: hidden;
+  }
+  .stat::after { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(255,255,255,.02),transparent); pointer-events:none; }
+  .stat-val { font-size: 22px; font-weight: 700; font-family: 'JetBrains Mono'; line-height: 1; }
+  .stat-lbl { font-size: 9px; color: var(--muted); margin-top: 5px; letter-spacing: 1.5px; font-weight: 600; }
+
+  /* TAG */
+  .tag { display: inline-flex; align-items: center; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 700; letter-spacing: .8px; font-family: 'JetBrains Mono'; }
+
+  /* PICK CARD */
+  .pick {
+    background: var(--s2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 10px; display: flex; gap: 12px;
+    justify-content: space-between; align-items: flex-start;
+    border-left: 3px solid var(--border); transition: border-color .2s;
+    animation: fadein .3s ease both;
+  }
+  .pick.win { border-left-color: var(--green); }
+  .pick.loss { border-left-color: var(--red); }
+  .pick.pending { border-left-color: var(--accent); }
+  .pick.push { border-left-color: var(--yellow); }
+  .pick-title { font-weight: 700; font-size: 14px; margin-bottom: 5px; }
+  .pick-meta { font-size: 10px; color: var(--muted2); margin-bottom: 6px; }
+  .pick-stats { display: flex; gap: 14px; font-size: 11px; flex-wrap: wrap; }
+  .pick-stats span { color: var(--muted2); }
+  .pick-stats strong { color: var(--text); }
+  .pick-reasoning { font-size: 10px; color: #5555aa; margin-top: 6px; border-left: 2px solid var(--border); padding-left: 8px; font-family: 'JetBrains Mono'; }
+  .pick-pnl { font-weight: 800; font-size: 16px; white-space: nowrap; font-family: 'JetBrains Mono'; align-self: center; }
+
+  /* SPORT ROW */
+  .sport-row { background: var(--s2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+
+  /* LOG */
+  .log-box { background: #02020a; border: 1px solid var(--border); border-radius: 10px; padding: 14px; height: 460px; overflow-y: auto; font-family: 'JetBrains Mono'; font-size: 11px; line-height: 1.9; }
+  .log-box::-webkit-scrollbar { width: 3px; }
+  .log-box::-webkit-scrollbar-thumb { background: #1a1a3a; }
+
+  /* BUTTON */
+  button {
+    font-family: 'Space Grotesk'; font-weight: 700; cursor: pointer;
+    border-radius: 6px; letter-spacing: 1px; transition: all .15s; border: none;
+    font-size: 11px; padding: 8px 16px;
+  }
+  button:hover { filter: brightness(1.2); }
+  button:disabled { opacity: .4; cursor: not-allowed; filter: none; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-ghost { background: transparent; border: 1px solid var(--muted); color: var(--muted); }
+  .btn-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+
+  /* SECTION LABEL */
+  .section-lbl { font-size: 10px; color: var(--muted); letter-spacing: 2px; font-weight: 600; margin-bottom: 10px; }
+
+  /* EMPTY */
+  .empty { background: var(--s2); border: 1px solid var(--border); border-radius: 10px; padding: 32px; text-align: center; color: var(--muted2); font-size: 12px; }
+
+  /* FILTER BUTTONS */
+  .filter-btn { background: transparent; border: 1px solid var(--muted); color: var(--muted); padding: 5px 12px; border-radius: 5px; font-size: 10px; }
+  .filter-btn.active-all { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,.08); }
+  .filter-btn.active-pending { border-color: var(--yellow); color: var(--yellow); background: rgba(255,201,71,.08); }
+  .filter-btn.active-win { border-color: var(--green); color: var(--green); background: rgba(0,230,118,.08); }
+  .filter-btn.active-loss { border-color: var(--red); color: var(--red); background: rgba(255,61,87,.08); }
+
+  /* NOTICE BOX */
+  .notice { background: rgba(0,212,255,.06); border: 1px solid rgba(0,212,255,.2); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 11px; color: var(--muted2); line-height: 1.8; }
+  .notice strong { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div>
+    <span class="logo">BET<span>EDGE</span><small>v6 · STANDALONE</small></span>
+  </div>
+  <div class="header-right">
+    <span class="status-dot" id="dot"></span>
+    <span id="status-lbl" style="font-size:10px;color:var(--muted);letter-spacing:1px">STANDBY</span>
+    <span id="next-lbl" style="font-size:10px;color:var(--muted)"></span>
+    <button class="btn-primary" id="run-btn" onclick="go()">▶ KØR NU</button>
+  </div>
+</header>
+
+<nav>
+  <div class="tab active" onclick="switchTab('dashboard')">DASHBOARD</div>
+  <div class="tab" onclick="switchTab('picks')">PICKS (<span id="picks-count">0</span>)</div>
+  <div class="tab" onclick="switchTab('log')">LOG</div>
+
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <div class="panel active" id="panel-dashboard">
+    <div class="stats" id="stats-grid">
+      <div class="stat"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">TOTAL PICKS</div></div>
+      <div class="stat"><div class="stat-val" id="s-wr" style="color:var(--muted)">—</div><div class="stat-lbl">WIN RATE</div></div>
+      <div class="stat"><div class="stat-val" id="s-pnl" style="color:var(--muted)">—</div><div class="stat-lbl">TOTAL P/L</div></div>
+      <div class="stat"><div class="stat-val" id="s-roi" style="color:var(--muted)">—</div><div class="stat-lbl">ROI</div></div>
+      <div class="stat"><div class="stat-val" id="s-odds" style="color:var(--purple)">—</div><div class="stat-lbl">AVG ODDS</div></div>
+      <div class="stat"><div class="stat-val" id="s-settled" style="color:var(--muted)">—</div><div class="stat-lbl">AFGJORTE</div></div>
+    </div>
+
+    <div class="section-lbl">AKTIVE PICKS</div>
+    <div id="active-picks"></div>
+
+    <div class="section-lbl" id="sport-lbl" style="margin-top:20px;display:none">PERFORMANCE PER SPORT</div>
+    <div id="sport-breakdown"></div>
+
+    <div class="notice" style="margin-top:20px">
+      <strong>SYSTEM LOGIK v6</strong><br>
+      Odds-API.io → value bets mod 265 bookmakers → AI double-check → Kelly Criterion stake → Auto-afregning via Supabase Edge Function
+    </div>
+  </div>
+
+  <!-- PICKS -->
+  <div class="panel" id="panel-picks">
+    <div class="btn-bar">
+      <button class="filter-btn active-all" id="f-all" onclick="setFilter('all')">ALL (<span id="fc-all">0</span>)</button>
+      <button class="filter-btn" id="f-pending" onclick="setFilter('pending')">PENDING (<span id="fc-pending">0</span>)</button>
+      <button class="filter-btn" id="f-win" onclick="setFilter('win')">WIN (<span id="fc-win">0</span>)</button>
+      <button class="filter-btn" id="f-loss" onclick="setFilter('loss')">LOSS (<span id="fc-loss">0</span>)</button>
+      <button class="btn-ghost" onclick="loadData()">↺</button>
+    </div>
+    <div id="picks-list"></div>
+  </div>
+
+  <!-- LOG -->
+  <div class="panel" id="panel-log">
+    <div class="btn-bar">
+      <button class="btn-ghost" onclick="document.getElementById('log-box').innerHTML='';logLines=[]">RYD</button>
+      <button class="btn-primary" id="log-run-btn" onclick="go()">▶ KØR NU</button>
+      <button class="btn-ghost" onclick="loadData()">↺ DATA</button>
+      <span id="live-lbl" style="font-size:10px;color:var(--green);display:none;animation:pulse 1.2s infinite">● LIVE</span>
+    </div>
+    <div class="log-box mono" id="log-box">
+      <span style="color:var(--muted)">Tryk KØR NU for at starte en analyse-runde...</span>
+    </div>
+    <div style="margin-top:8px;font-size:10px;color:var(--muted);font-family:'JetBrains Mono'">
+      Edge Function kører på Supabase · Auto hvert 4t · Logs streames live
+    </div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="panel" id="panel-setup">
+    <div class="notice">
+      <strong>OPSÆTNING</strong><br>
+      Gem dine API-nøgler herunder. De gemmes kun lokalt i din browser (localStorage).
+    </div>
+    <div style="display:grid;gap:16px;max-width:500px">
+
+      <div>
+        <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;letter-spacing:1px">ODDS-API.IO NØGLE</div>
+        <div style="display:flex;gap:8px">
+          <input id="inp-odds" type="password" placeholder="din-odds-api-nøgle" style="flex:1;background:var(--s2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:6px;font-family:'JetBrains Mono';font-size:12px;outline:none">
+          <button class="btn-primary" onclick="saveKey('odds')">GEM</button>
+        </div>
+        <div id="saved-odds" style="font-size:10px;margin-top:5px;font-family:'JetBrains Mono';color:var(--muted)"></div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;letter-spacing:1px">SUPABASE URL</div>
+        <div style="display:flex;gap:8px">
+          <input id="inp-sb-url" type="text" placeholder="https://xxx.supabase.co" style="flex:1;background:var(--s2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:6px;font-family:'JetBrains Mono';font-size:12px;outline:none">
+          <button class="btn-primary" onclick="saveKey('sb-url')">GEM</button>
+        </div>
+        <div id="saved-sb-url" style="font-size:10px;margin-top:5px;font-family:'JetBrains Mono';color:var(--muted)"></div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;letter-spacing:1px">SUPABASE ANON KEY</div>
+        <div style="display:flex;gap:8px">
+          <input id="inp-sb-key" type="password" placeholder="eyJ..." style="flex:1;background:var(--s2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:6px;font-family:'JetBrains Mono';font-size:12px;outline:none">
+          <button class="btn-primary" onclick="saveKey('sb-key')">GEM</button>
+        </div>
+        <div id="saved-sb-key" style="font-size:10px;margin-top:5px;font-family:'JetBrains Mono';color:var(--muted)"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="testConnection()">TEST FORBINDELSE</button>
+        <button class="btn-ghost" onclick="clearKeys()">RYD ALLE NØGLER</button>
+      </div>
+      <div id="conn-result" style="font-size:11px;font-family:'JetBrains Mono'"></div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+// ── CONFIG ──
+const cfg = () => ({
+  sbUrl: "https://omnepnwzvajonfeussuz.supabase.co",
+  sbKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tbmVwbnd6dmFqb25mZXVzc3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NzA3NjIsImV4cCI6MjA5NDE0Njc2Mn0.8VoGsvG2IOskrA-N8b_jLgFKSPTiIGlYpqR610PabzU",
+  oddsKey: "0a32b62afc3e4b14ff187f27234a1dd4f5690284b4cf7ea7ffaf992b07526a71",
+});
+
+// ── STATE ──
+let allPicks = [];
+let currentFilter = "all";
+let running = false;
+let pollTimer = null;
+let autoTimer = null;
+let logLines = [];
+let seenLogs = new Set();
+let lastRun = null;
+let nextRun = null;
+const AUTO_MS = 4 * 60 * 60 * 1000;
+
+function setLastRun(val) {
+  lastRun = val;
+  const el = document.getElementById("last-lbl");
+  if (el) el.textContent = val ? `Sidst: ${val.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"})}` : "";
+}
+function setNextRun(val) {
+  nextRun = val;
+  const el = document.getElementById("next-lbl");
+  if (el) el.textContent = val ? `↻ ${val.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"})}` : "";
+  // Schedule auto-run
+  clearTimeout(autoTimer);
+  if (val) autoTimer = setTimeout(go, val.getTime() - Date.now());
+}
+
+// ── SUPABASE ──
+async function sbFetch(path, opts = {}) {
+  const { sbUrl, sbKey } = cfg();
+  const res = await fetch(`${sbUrl}/rest/v1/${path}`, {
+    headers: {
+      apikey: sbKey,
+      Authorization: `Bearer ${sbKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+      ...(opts.headers || {}),
+    },
+    ...opts,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`SB ${res.status}: ${text.slice(0,120)}`);
+  return text ? JSON.parse(text) : null;
+}
+
+// ── EDGE FUNCTION ──
+// ── EDGE FUNCTION (odds + settle only) ──
+async function edgeCall(action, body = null) {
+  const { sbUrl, sbKey, oddsKey } = cfg();
+  const url = `${sbUrl}/functions/v1/run-cycle?action=${action}`;
+  const opts = {
+    method: body ? "POST" : "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${sbKey}`, "x-odds-api-key": oddsKey },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(`Edge ${res.status}: ${(await res.text()).slice(0,150)}`);
+  return res.json();
+}
+
+// ── AI ANALYSE (runs in browser — no Supabase network restriction) ──
+const ANTHROPIC_KEY = "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";
+
+async function aiCheck(candidate) {
+  const { event: e, betSide, odds, expectedValue } = candidate;
+  const ev = ((expectedValue ?? 0) * 100).toFixed(1);
+  const prompt = `You are a sports betting analyst. Evaluate this value bet.
+
+Match: ${e.home ?? "?"} vs ${e.away ?? "?"}
+League: ${e.league ?? "Unknown"}
+Bet: ${betSide} @ ${odds}
+API Expected Value: +${ev}%
+
+Respond with ONLY this JSON, no other text:
+{"confidence": 7, "ai_prob": 58.5, "verdict": "BUY", "reasoning": "Short reason"}
+
+Rules:
+- confidence: integer 1-10
+- ai_prob: your win probability estimate 0-100
+- verdict: exactly STRONG BUY, BUY, SKIP, or AVOID
+- reasoning: max 80 chars`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 150, messages: [{ role: "user", content: prompt }] }),
+  });
+  if (!res.ok) throw new Error(`Anthropic ${res.status}`);
+  const data = await res.json();
+  const txt = data.content?.find(c => c.type === "text")?.text ?? "";
+  const match = txt.replace(/```[a-z]*\n?/g,"").replace(/```/g,"").trim().match(/\{[\s\S]*?\}/);
+  if (!match) throw new Error("No JSON in AI response: " + txt.slice(0,100));
+  const parsed = JSON.parse(match[0]);
+  if (typeof parsed.confidence !== "number" || typeof parsed.ai_prob !== "number") throw new Error("Bad AI fields");
+  parsed.ai_edge = parseFloat(((parsed.ai_prob / 100 * odds - 1) * 100).toFixed(2));
+  return parsed;
+}
+
+function kelly(prob, odds) {
+  const p = prob / 100, b = odds - 1;
+  const k = (b * p - (1 - p)) / b;
+  return parseFloat(Math.max(0.1, Math.min(2, k * 0.25 * 10)).toFixed(2));
+}
+
+// ── LOG ──
+function addLog(msg) {
+  if (seenLogs.has(msg)) return;
+  seenLogs.add(msg);
+  logLines.push(msg);
+  const box = document.getElementById("log-box");
+  const div = document.createElement("div");
+  div.textContent = msg;
+  div.style.color =
+    msg.includes("✅") || msg.includes("WIN") ? "var(--green)" :
+    msg.includes("❌") || msg.includes("⚠") ? "var(--red)" :
+    msg.includes("🤖") ? "var(--purple)" :
+    msg.includes("📡") ? "var(--accent)" :
+    msg.includes("🚀") ? "var(--yellow)" : "#5a5a8a";
+  if (box.querySelector(".muted-placeholder")) box.innerHTML = "";
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── LOAD DATA ──
+async function loadData() {
+  try {
+    const [picks, perf] = await Promise.all([
+      sbFetch("picks?order=created_at.desc&limit=100"),
+      sbFetch("overall_performance"),
+    ]);
+    allPicks = picks || [];
+    renderStats(perf?.[0]);
+    renderPicks();
+    renderSportBreakdown();
+    document.getElementById("picks-count").textContent = allPicks.length;
+    updateFilterCounts();
+  } catch (e) {
+    addLog(`⚠ Data load: ${e.message}`);
+  }
+}
+
+// ── RENDER STATS ──
+function renderStats(s) {
+  if (!s) return;
+  const wr = parseFloat(s.win_rate);
+  const pnl = parseFloat(s.total_pnl);
+  const roi = parseFloat(s.roi);
+  document.getElementById("s-total").textContent = s.total_picks ?? "—";
+  document.getElementById("s-wr").textContent = s.win_rate ? `${s.win_rate}%` : "—";
+  document.getElementById("s-wr").style.color = wr >= 55 ? "var(--green)" : wr >= 45 ? "var(--yellow)" : "var(--red)";
+  document.getElementById("s-pnl").textContent = s.total_pnl != null ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}u` : "—";
+  document.getElementById("s-pnl").style.color = pnl >= 0 ? "var(--green)" : "var(--red)";
+  document.getElementById("s-roi").textContent = s.roi != null ? `${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%` : "—";
+  document.getElementById("s-roi").style.color = roi >= 0 ? "var(--green)" : "var(--red)";
+  document.getElementById("s-odds").textContent = s.avg_odds ? parseFloat(s.avg_odds).toFixed(2) : "—";
+  document.getElementById("s-settled").textContent = s.settled ?? "—";
+}
+
+// ── RENDER PICKS ──
+function pickHTML(p) {
+  const rc = p.result === "win" ? "var(--green)" : p.result === "loss" ? "var(--red)" : p.result === "push" ? "var(--yellow)" : "var(--accent)";
+  const pnl = p.profit_loss;
+  const rec = p.recommendation || "";
+  const recColor = rec === "STRONG BUY" ? "var(--green)" : "var(--yellow)";
+  const date = new Date(p.commence_time).toLocaleString("da-DK", {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+  return `
+    <div class="pick ${p.result || 'pending'}">
+      <div style="flex:1">
+        <div class="pick-title">
+          ${p.home_team} vs ${p.away_team}
+          <span class="tag" style="background:rgba(156,111,255,.12);color:var(--purple);margin-left:6px">${p.pick}</span>
+          <span class="tag" style="background:${rc}18;color:${rc};margin-left:4px">${(p.result||"pending").toUpperCase()}</span>
+          ${rec ? `<span class="tag" style="background:${recColor}18;color:${recColor};margin-left:4px">${rec}</span>` : ""}
+        </div>
+        <div class="pick-meta">${p.sport} · ${p.analysis||""} · ${date}</div>
+        <div class="pick-stats">
+          <span>Odds <strong>${parseFloat(p.odds).toFixed(2)}</strong></span>
+          ${p.api_ev != null ? `<span>API EV <strong style="color:var(--green)">+${p.api_ev}%</strong></span>` : ""}
+          ${p.value_edge != null ? `<span>AI edge <strong style="color:var(--accent)">+${parseFloat(p.value_edge).toFixed(1)}%</strong></span>` : ""}
+          ${p.confidence ? `<span>Conf <strong>${p.confidence}/10</strong></span>` : ""}
+          <span>Stake <strong style="color:var(--yellow)">${p.stake}u</strong></span>
+        </div>
+        ${p.reasoning ? `<div class="pick-reasoning">${p.reasoning}</div>` : ""}
+      </div>
+      ${pnl != null && p.result !== "pending" ? `<div class="pick-pnl" style="color:${parseFloat(pnl)>=0?"var(--green)":"var(--red)"}">${parseFloat(pnl)>=0?"+":""}${parseFloat(pnl).toFixed(2)}u</div>` : ""}
+    </div>`;
+}
+
+function renderPicks() {
+  const fp = currentFilter === "all" ? allPicks : allPicks.filter(p => p.result === currentFilter);
+  const el = document.getElementById("picks-list");
+  el.innerHTML = fp.length === 0
+    ? '<div class="empty">Ingen picks for dette filter</div>'
+    : fp.map(pickHTML).join("");
+
+  const active = allPicks.filter(p => p.result === "pending");
+  const el2 = document.getElementById("active-picks");
+  el2.innerHTML = active.length === 0
+    ? '<div class="empty">Ingen aktive picks — kør en analyse-runde</div>'
+    : active.slice(0,10).map(pickHTML).join("");
+}
+
+function updateFilterCounts() {
+  document.getElementById("fc-all").textContent = allPicks.length;
+  document.getElementById("fc-pending").textContent = allPicks.filter(p=>p.result==="pending").length;
+  document.getElementById("fc-win").textContent = allPicks.filter(p=>p.result==="win").length;
+  document.getElementById("fc-loss").textContent = allPicks.filter(p=>p.result==="loss").length;
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  ["all","pending","win","loss"].forEach(x => {
+    const btn = document.getElementById(`f-${x}`);
+    btn.className = `filter-btn${f===x?" active-"+x:""}`;
+  });
+  renderPicks();
+}
+
+// ── SPORT BREAKDOWN ──
+function renderSportBreakdown() {
+  const map = {};
+  allPicks.filter(p => p.result && p.result !== "pending").forEach(p => {
+    if (!map[p.sport]) map[p.sport] = { wins:0, losses:0, pnl:0 };
+    if (p.result === "win") { map[p.sport].wins++; map[p.sport].pnl += p.profit_loss||0; }
+    if (p.result === "loss") { map[p.sport].losses++; map[p.sport].pnl += p.profit_loss||0; }
+  });
+  const entries = Object.entries(map).sort((a,b)=>b[1].pnl-a[1].pnl);
+  const el = document.getElementById("sport-breakdown");
+  const lbl = document.getElementById("sport-lbl");
+  if (entries.length === 0) { el.innerHTML=""; lbl.style.display="none"; return; }
+  lbl.style.display = "block";
+  el.innerHTML = entries.map(([sp,d]) => `
+    <div class="sport-row">
+      <div>
+        <strong style="font-size:13px">${sp}</strong>
+        <span style="font-size:10px;color:var(--muted2);margin-left:12px">${d.wins}W/${d.losses}L · ${((d.wins/(d.wins+d.losses))*100).toFixed(0)}% WR</span>
+      </div>
+      <span style="font-weight:800;font-family:'JetBrains Mono';color:${d.pnl>=0?"var(--green)":"var(--red)"}">${d.pnl>=0?"+":""}${d.pnl.toFixed(2)}u</span>
+    </div>`).join("");
+}
+
+// ── POLL RUN STATUS ──
+function startPolling(runId) {
+  clearInterval(pollTimer);
+  let prevCount = 0;
+  pollTimer = setInterval(async () => {
+    try {
+      const data = await sbFetch(`run_status?id=eq.${runId}&select=status,logs,picks_generated`);
+      const run = data?.[0];
+      if (!run) return;
+      const newLogs = (run.logs || []).slice(prevCount);
+      newLogs.forEach(l => addLog(l));
+      prevCount = (run.logs || []).length;
+      if (run.status === "done" || run.status === "error") {
+        clearInterval(pollTimer);
+        setRunning(false);
+        addLog("── Runde afsluttet ──");
+        await loadData();
+        const next = new Date(Date.now() + 4*60*60*1000);
+        document.getElementById("next-lbl").textContent = `↻ ${next.toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"})}`;
+        autoTimer = setTimeout(go, 4*60*60*1000);
+      }
+    } catch {}
+  }, 3000);
+}
+
+// ── SET RUNNING STATE ──
+function setRunning(val) {
+  running = val;
+  const dot = document.getElementById("dot");
+  const lbl = document.getElementById("status-lbl");
+  const btn = document.getElementById("run-btn");
+  const logBtn = document.getElementById("log-run-btn");
+  const liveLbl = document.getElementById("live-lbl");
+  dot.className = "status-dot" + (val ? " active" : "");
+  lbl.textContent = val ? "ANALYSERER" : "STANDBY";
+  lbl.style.color = val ? "var(--green)" : "var(--muted)";
+  btn.textContent = val ? "KØRER..." : "▶ KØR NU";
+  btn.disabled = val;
+  logBtn.textContent = val ? "KØRER..." : "▶ KØR NU";
+  logBtn.disabled = val;
+  liveLbl.style.display = val ? "inline" : "none";
+}
+
+// ── MAIN GO FUNCTION ──
+async function go() {
+  if (running) return;
+  clearTimeout(autoTimer);
+  setRunning(true);
+  seenLogs.clear();
+  addLog("📡 Starter Edge Function...");
+
+  try {
+    // Step 1: Settle existing picks
+    addLog("📊 Tjekker eksisterende picks...");
+    const settle = await edgeCall("settle");
+    (settle.logs||[]).forEach(l => addLog(l));
+
+    // Step 2: Fetch value bet candidates from Edge Function
+    addLog("📡 Henter value bets fra Odds-API...");
+    const fetchResult = await edgeCall("fetch_candidates");
+    addLog(`   Raw svar: ${JSON.stringify(fetchResult).slice(0,200)}`);
+    const candidates = fetchResult.candidates || [];
+    const fetchLogs = fetchResult.logs || [];
+    fetchLogs.forEach(l => addLog(l));
+    addLog(`🎯 ${candidates.length} kandidater til AI-analyse...`);
+
+    // Step 3: AI analyse each candidate IN BROWSER
+    let saved = 0;
+    for (const candidate of candidates) {
+      const { event: e, betSide, odds, expectedValue, sport, eventId } = candidate;
+      addLog(`🤖 ${e.home ?? "?"} vs ${e.away ?? "?"} · ${betSide} @ ${odds}`);
+      try {
+        const ai = await aiCheck(candidate);
+        addLog(`   AI: conf=${ai.confidence} edge=${ai.ai_edge.toFixed(1)}% ${ai.verdict}`);
+        addLog(`   AI svar: conf=${ai.confidence} prob=${ai.ai_prob}% edge=${ai.ai_edge.toFixed(1)}% verdict=${ai.verdict}`);
+        if (ai.confidence >= 4 && ai.ai_edge >= 0 && (ai.verdict === "BUY" || ai.verdict === "STRONG BUY")) {
+          const pick = {
+            game_id: String(eventId),
+            sport: e.sport ?? sport,
+            home_team: e.home ?? "?",
+            away_team: e.away ?? "?",
+            commence_time: e.date ?? new Date().toISOString(),
+            pick: betSide === "home" ? e.home : betSide === "away" ? e.away : "Draw",
+            bet_side: betSide,
+            odds,
+            implied_prob: +((1/odds)*100).toFixed(2),
+            ai_prob: ai.ai_prob,
+            value_edge: +ai.ai_edge.toFixed(2),
+            api_ev: +((expectedValue??0)*100).toFixed(2),
+            confidence: ai.confidence,
+            stake: kelly(ai.ai_prob, odds),
+            analysis: e.league ?? sport,
+            reasoning: ai.reasoning,
+            recommendation: ai.verdict,
+            model_version: "v7",
+          };
+          const result = await edgeCall("save_pick", pick);
+          if (result.ok) {
+            saved++;
+            addLog(`   ✅ PICK GEMT: ${betSide} @ ${odds} | EV +${((expectedValue??0)*100).toFixed(1)}% | AI edge +${ai.ai_edge.toFixed(1)}%`);
+          } else {
+            addLog(`   ⚠ Gem fejl: ${result.error}`);
+          }
+        } else {
+          addLog(`   ⏩ Skip: conf=${ai.confidence} edge=${ai.ai_edge.toFixed(1)}% ${ai.verdict}`);
+        }
+      } catch(aiErr) {
+        addLog(`   ⚠ AI fejl: ${aiErr.message}`);
+        console.error("AI error details:", aiErr);
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    addLog(`✅ Færdig: ${saved} nye picks gemt`);
+    await loadData();
+    const now = new Date();
+    setLastRun(now);
+    setNextRun(new Date(now.getTime() + AUTO_MS));
+    setRunning(false);
+  } catch(e) {
+    addLog(`❌ ${e.message}`);
+    setRunning(false);
+  }
+}
+
+// ── TAB SWITCHING ──
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach((t,i) => {
+    const names = ["dashboard","picks","log"];
+    t.className = "tab" + (names[i]===name?" active":"");
+  });
+  document.querySelectorAll(".panel").forEach(p => p.className="panel");
+  document.getElementById(`panel-${name}`).className="panel active";
+}
+
+// ── SETUP ──
+const KEY_MAP = { odds:"be_odds_key", "sb-url":"be_sb_url", "sb-key":"be_sb_key" };
+
+function saveKey(type) {
+  const inp = document.getElementById(`inp-${type}`);
+  const val = inp.value.trim();
+  if (!val) {
+    showSavedStatus(type, "⚠ Feltet er tomt", "var(--yellow)");
+    return;
+  }
+  localStorage.setItem(KEY_MAP[type], val);
+  inp.value = "";
+  showSavedStatus(type, "✓ Gemt", "var(--green)");
+  refreshSavedState();
+}
+
+function showSavedStatus(type, msg, color) {
+  const el = document.getElementById(`saved-${type}`);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color;
+  setTimeout(() => refreshSavedState(), 2500);
+}
+
+function refreshSavedState() {
+  const checks = [
+    { type:"odds", key:"be_odds_key", label:"Odds-API.io" },
+    { type:"sb-url", key:"be_sb_url", label:"Supabase URL" },
+    { type:"sb-key", key:"be_sb_key", label:"Supabase Key" },
+  ];
+  checks.forEach(({ type, key, label }) => {
+    const el = document.getElementById(`saved-${type}`);
+    if (!el) return;
+    const val = localStorage.getItem(key);
+    if (val) {
+      const preview = type === "sb-url" ? val : val.slice(0,6) + "••••••" + val.slice(-4);
+      el.textContent = `✓ Gemt: ${preview}`;
+      el.style.color = "var(--green)";
+    } else if (type === "sb-url" || type === "sb-key") {
+      el.textContent = "Bruger standard Supabase config";
+      el.style.color = "var(--muted)";
+    } else {
+      el.textContent = "Ikke gemt";
+      el.style.color = "var(--red)";
+    }
+  });
+}
+
+function clearKeys() {
+  ["be_odds_key","be_sb_url","be_sb_key"].forEach(k => localStorage.removeItem(k));
+  refreshSavedState();
+  document.getElementById("conn-result").textContent = "";
+}
+
+async function testConnection() {
+  const el = document.getElementById("conn-result");
+  el.style.color = "var(--muted2)";
+  el.textContent = "Tester forbindelse...";
+  try {
+    const data = await sbFetch("picks?limit=1");
+    el.style.color = "var(--green)";
+    el.textContent = `✅ Supabase OK — ${Array.isArray(data) ? data.length + " picks fundet" : "forbundet"}`;
+  } catch(e) {
+    el.style.color = "var(--red)";
+    el.textContent = `❌ ${e.message}`;
+  }
+}
+
+// ── INIT ──
+window.onload = () => {
+  refreshSavedState();
+  loadData();
+};
+</script>
+</body>
+</html>
