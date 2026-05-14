@@ -259,6 +259,7 @@ const cfg = () => ({
   sbUrl: "https://omnepnwzvajonfeussuz.supabase.co",
   sbKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tbmVwbnd6dmFqb25mZXVzc3V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NzA3NjIsImV4cCI6MjA5NDE0Njc2Mn0.8VoGsvG2IOskrA-N8b_jLgFKSPTiIGlYpqR610PabzU",
   oddsKey: "0a32b62afc3e4b14ff187f27234a1dd4f5690284b4cf7ea7ffaf992b07526a71",
+  anthropicKey: "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",
 });
 
 // ── STATE ──
@@ -306,18 +307,32 @@ async function sbFetch(path, opts = {}) {
 }
 
 // ── EDGE FUNCTION ──
-// ── EDGE FUNCTION (odds + settle only) ──
+// ── EDGE FUNCTION ──
 async function edgeCall(action, body = null) {
-  const { sbUrl, sbKey, oddsKey } = cfg();
+  const { sbUrl, sbKey, oddsKey, anthropicKey } = cfg();
   const url = `${sbUrl}/functions/v1/run-cycle?action=${action}`;
-  const opts = {
-    method: body ? "POST" : "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${sbKey}`, "x-odds-api-key": oddsKey },
-  };
-  if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (!res.ok) throw new Error(`Edge ${res.status}: ${(await res.text()).slice(0,150)}`);
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${sbKey}`,
+        "x-odds-api-key": oddsKey,
+        "x-anthropic-key": anthropicKey,
+      },
+      body: body ? JSON.stringify(body) : "{}",
+    });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`Edge ${res.status}: ${(await res.text()).slice(0,200)}`);
+    return res.json();
+  } catch(e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") throw new Error("Timeout efter 120 sek");
+    throw e;
+  }
 }
 
 // ── AI ANALYSE (runs in browser — no Supabase network restriction) ──
@@ -556,68 +571,12 @@ async function go() {
   addLog("📡 Starter Edge Function...");
 
   try {
-    // Step 1: Settle existing picks
-    addLog("📊 Tjekker eksisterende picks...");
-    const settle = await edgeCall("settle");
-    (settle.logs||[]).forEach(l => addLog(l));
-
-    // Step 2: Fetch value bet candidates from Edge Function
-    addLog("📡 Henter value bets fra Odds-API...");
-    const fetchResult = await edgeCall("fetch_candidates");
-    addLog(`   Raw svar: ${JSON.stringify(fetchResult).slice(0,200)}`);
-    const candidates = fetchResult.candidates || [];
-    const fetchLogs = fetchResult.logs || [];
-    fetchLogs.forEach(l => addLog(l));
-    addLog(`🎯 ${candidates.length} kandidater til AI-analyse...`);
-
-    // Step 3: AI analyse each candidate IN BROWSER
-    let saved = 0;
-    for (const candidate of candidates) {
-      const { event: e, betSide, odds, expectedValue, sport, eventId } = candidate;
-      addLog(`🤖 ${e.home ?? "?"} vs ${e.away ?? "?"} · ${betSide} @ ${odds}`);
-      try {
-        const ai = await aiCheck(candidate);
-        addLog(`   AI: conf=${ai.confidence} edge=${ai.ai_edge.toFixed(1)}% ${ai.verdict}`);
-        addLog(`   AI svar: conf=${ai.confidence} prob=${ai.ai_prob}% edge=${ai.ai_edge.toFixed(1)}% verdict=${ai.verdict}`);
-        if (ai.confidence >= 4 && ai.ai_edge >= 0 && (ai.verdict === "BUY" || ai.verdict === "STRONG BUY")) {
-          const pick = {
-            game_id: String(eventId),
-            sport: e.sport ?? sport,
-            home_team: e.home ?? "?",
-            away_team: e.away ?? "?",
-            commence_time: e.date ?? new Date().toISOString(),
-            pick: betSide === "home" ? e.home : betSide === "away" ? e.away : "Draw",
-            bet_side: betSide,
-            odds,
-            implied_prob: +((1/odds)*100).toFixed(2),
-            ai_prob: ai.ai_prob,
-            value_edge: +ai.ai_edge.toFixed(2),
-            api_ev: +((expectedValue??0)*100).toFixed(2),
-            confidence: ai.confidence,
-            stake: kelly(ai.ai_prob, odds),
-            analysis: e.league ?? sport,
-            reasoning: ai.reasoning,
-            recommendation: ai.verdict,
-            model_version: "v7",
-          };
-          const result = await edgeCall("save_pick", pick);
-          if (result.ok) {
-            saved++;
-            addLog(`   ✅ PICK GEMT: ${betSide} @ ${odds} | EV +${((expectedValue??0)*100).toFixed(1)}% | AI edge +${ai.ai_edge.toFixed(1)}%`);
-          } else {
-            addLog(`   ⚠ Gem fejl: ${result.error}`);
-          }
-        } else {
-          addLog(`   ⏩ Skip: conf=${ai.confidence} edge=${ai.ai_edge.toFixed(1)}% ${ai.verdict}`);
-        }
-      } catch(aiErr) {
-        addLog(`   ⚠ AI fejl: ${aiErr.message}`);
-        console.error("AI error details:", aiErr);
-      }
-      await new Promise(r => setTimeout(r, 200));
-    }
-
-    addLog(`✅ Færdig: ${saved} nye picks gemt`);
+    // Single call — Edge Function handles everything
+    addLog("📡 Kører analyse på Supabase...");
+    const result = await edgeCall("run");
+    (result.logs || []).forEach(l => addLog(l));
+    if (result.error) throw new Error(result.error);
+    addLog(`✅ Færdig: ${result.picks_generated ?? 0} nye picks gemt`);
     await loadData();
     const now = new Date();
     setLastRun(now);
